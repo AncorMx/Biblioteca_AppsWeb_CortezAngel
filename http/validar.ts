@@ -4,7 +4,7 @@ import { EjemplarPrestadoError } from '../src/errores/ejemplar-prestado.error.js
 
 export class ValidacionError extends Error {
   constructor(public readonly errores: string[]) {
-    super(errores.join('; '));
+    super(errores.join(', '));
     this.name = 'ValidacionError';
   }
 }
@@ -13,29 +13,29 @@ export function validarCrearPrestamo(dato: unknown): CrearPrestamoRequestDto {
   const errores: string[] = [];
 
   if (!dato || typeof dato !== 'object') {
-    throw new ValidacionError(['El cuerpo de la petición debe ser un objeto JSON']);
+    throw new ValidacionError(['Cuerpo invalido']);
   }
 
   const body = dato as Record<string, unknown>;
 
   if (typeof body.libroId !== 'string' || body.libroId.trim() === '') {
-    errores.push('El campo libroId es obligatorio y debe ser una cadena de texto no vacía');
+    errores.push('Falta el libroId');
   }
 
   if (typeof body.socioId !== 'string' || body.socioId.trim() === '') {
-    errores.push('El campo socioId es obligatorio y debe ser una cadena de texto no vacía');
+    errores.push('Falta el socioId');
   }
 
   if (!Array.isArray(body.ejemplares)) {
-    errores.push('El campo ejemplares debe ser un arreglo');
+    errores.push('ejemplares debe ser un arreglo');
   } else if (body.ejemplares.length === 0) {
-    errores.push('El campo ejemplares no puede estar vacío');
+    errores.push('ejemplares no puede estar vacio');
   } else {
-    const todosSonNumerosValidos = body.ejemplares.every(
-      (e) => typeof e === 'number' && !Number.isNaN(e) && Number.isInteger(e) && e > 0
+    const invalidos = body.ejemplares.some(
+      (e) => typeof e !== 'number' || Number.isNaN(e) || e <= 0
     );
-    if (!todosSonNumerosValidos) {
-      errores.push('Todos los ejemplares deben ser números enteros positivos');
+    if (invalidos) {
+      errores.push('Los ejemplares deben ser numeros');
     }
   }
 
@@ -57,33 +57,25 @@ export function manejadorErrores(
   next: NextFunction
 ): void {
   if (err instanceof SyntaxError && 'status' in err && (err as { status: number }).status === 400) {
-    const respuesta: ErrorResponseDto = {
-      error: 'JSON malformado en el cuerpo de la petición',
-    };
-    res.status(400).json(respuesta);
+    res.status(400).json({ error: 'JSON invalido' } satisfies ErrorResponseDto);
     return;
   }
 
   if (err instanceof ValidacionError) {
-    const respuesta: ErrorResponseDto = {
+    res.status(400).json({
       error: err.message,
       detalles: err.errores,
-    };
-    res.status(400).json(respuesta);
+    } satisfies ErrorResponseDto);
     return;
   }
 
   if (err instanceof EjemplarPrestadoError) {
-    const respuesta: ErrorResponseDto = {
+    res.status(409).json({
       error: err.message,
-    };
-    res.status(409).json(respuesta);
+    } satisfies ErrorResponseDto);
     return;
   }
 
-  console.error('Error interno no controlado:', err);
-  const respuesta: ErrorResponseDto = {
-    error: 'Error interno del servidor',
-  };
-  res.status(500).json(respuesta);
+  console.error(err);
+  res.status(500).json({ error: 'Error del servidor' } satisfies ErrorResponseDto);
 }
